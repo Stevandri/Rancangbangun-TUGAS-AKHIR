@@ -1,31 +1,62 @@
+//================================================================
+//          BABAK 1, POIN 1: SENSOR BERAT (2x HX711)
+//================================================================
+
+// Library yang dibutuhkan
 #include "HX711.h"
 
-// Pin ke HX711
-#define DT 19   // DOUT dari HX711
-#define SCK 27  // CLK dari HX711
+// --- Konfigurasi Pin Sensor Berat #1 ---
+const int DOUT_PIN_1 = 16;   // Pin data (DT)
+const int SCK_PIN_1 = 4;    // Pin clock (SCK)
 
-HX711 scale;
+// --- Konfigurasi Pin Sensor Berat #2 ---
+const int DOUT_PIN_2 = 18;   // Pin data (DT)
+const int SCK_PIN_2 = 5;   // Pin clock (SCK)
+
+// Inisialisasi objek untuk setiap sensor
+HX711 scale1;
+HX711 scale2;
+
+// Variabel untuk kalibrasi
+// PENTING: Nilai ini HARUS disesuaikan dengan load cell Anda.
+// Mulailah dengan -7050, lalu letakkan beban yang diketahui (misal 1kg),
+// dan ubah nilai ini hingga pembacaan menjadi 1.00.
+float KALIBRASI_B1 = -7050.0;
+float KALIBRASI_B2 = -150000.0;
 
 void setup() {
   Serial.begin(115200);
-  scale.begin(DT, SCK);
+  Serial.println("--- Memulai Poin 1: Inisialisasi Sensor Berat ---");
 
-  Serial.println("Inisialisasi...");
-  delay(1000);
+  // Inisialisasi Sensor 1
+  scale1.begin(DOUT_PIN_1, SCK_PIN_1);
+  scale1.set_scale(KALIBRASI_B1);
+  scale1.tare(); // Reset pembacaan awal menjadi 0
+  Serial.println("Sensor Berat 1 Siap.");
 
-  if (scale.is_ready()) {
-    Serial.println("HX711 Siap.");
-    scale.set_scale();  // Kalibrasi nanti
-    scale.tare();       // Reset berat awal ke 0
-  } else {
-    Serial.println("HX711 tidak terdeteksi.");
-    while (1);
-  }
+  // Inisialisasi Sensor 2
+  scale2.begin(DOUT_PIN_2, SCK_PIN_2);
+  scale2.set_scale(KALIBRASI_B2);
+  scale2.tare(); // Reset pembacaan awal menjadi 0
+  Serial.println("Sensor Berat 2 Siap.");
+  
+  Serial.println("\n--- Memulai Pembacaan ---");
 }
 
 void loop() {
-  Serial.print("Berat: ");
-  Serial.print(scale.get_units(), 2); // Menampilkan 2 angka di belakang koma
+  // Baca berat dari sensor 1
+  float berat1 = scale1.get_units(5); // Ambil rata-rata 5 pembacaan
+  Serial.print("Berat beban 1 : ");
+  Serial.print(berat1, 2); // Tampilkan 2 angka di belakang koma
   Serial.println(" kg");
-  delay(1000);
+delay(1000); // Jeda 1 detik agar mudah dibaca
+  // Baca berat dari sensor 2
+  float berat2 = scale2.get_units(10); // Ambil rata-rata 5 pembacaan
+  Serial.print("Berat beban 2 : ");
+  Serial.print(berat2, 2); // Tampilkan 2 angka di belakang koma
+  Serial.println(" kg");
+
+  Serial.println("--------------------");
+  
+  delay(1000); // Jeda 1 detik agar mudah dibaca
 }
