@@ -6,12 +6,12 @@
 #include "HX711.h"
 
 // --- Konfigurasi Pin Sensor Berat #1 ---
-const int DOUT_PIN_1 = 16;   // Pin data (DT)
-const int SCK_PIN_1 = 4;    // Pin clock (SCK)
+const int DOUT_PIN_1 = 35;
+const int SCK_PIN_1 = 18;
 
 // --- Konfigurasi Pin Sensor Berat #2 ---
-const int DOUT_PIN_2 = 18;   // Pin data (DT)
-const int SCK_PIN_2 = 5;   // Pin clock (SCK)
+const int DOUT_PIN_2 = 39;
+const int SCK_PIN_2 = 19;
 
 // Inisialisasi objek untuk setiap sensor
 HX711 scale1;
@@ -21,8 +21,11 @@ HX711 scale2;
 // PENTING: Nilai ini HARUS disesuaikan dengan load cell Anda.
 // Mulailah dengan -7050, lalu letakkan beban yang diketahui (misal 1kg),
 // dan ubah nilai ini hingga pembacaan menjadi 1.00.
+// Variabel Kalibrasi
 float KALIBRASI_B1 = -7050.0;
-float KALIBRASI_B2 = -150000.0;
+float KALIBRASI_B2 = -7050.0;
+
+
 
 void setup() {
   Serial.begin(115200);
