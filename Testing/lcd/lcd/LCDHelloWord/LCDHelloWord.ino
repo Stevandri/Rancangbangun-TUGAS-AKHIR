@@ -1,31 +1,28 @@
+//YWROBOT
+//Compatible with the Arduino IDE 1.0
+//Library version:1.1
+#include <Wire.h> 
 #include <LiquidCrystal_I2C.h>
 
-// set the LCD number of columns and rows
-int lcdColumns = 16;
-int lcdRows = 2;
+LiquidCrystal_I2C lcd(0x27,20,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 
-// set LCD address, number of columns and rows
-// if you don't know your display address, run an I2C scanner sketch
-LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);  
-
-void setup(){
-  // initialize LCD
+void setup()
+{
+  lcd.init();                      // initialize the lcd 
   lcd.init();
-  // turn on LCD backlight                      
+  // Print a message to the LCD.
   lcd.backlight();
+  lcd.setCursor(3,0);
+  lcd.print("Hello, world!");
+  lcd.setCursor(2,1);
+  lcd.print("Ywrobot Arduino!");
+   lcd.setCursor(0,2);
+  lcd.print("Arduino LCM IIC 2004");
+   lcd.setCursor(2,3);
+  lcd.print("Power By Ec-yuan!");
 }
 
-void loop(){
-  // set cursor to first column, first row
-  lcd.setCursor(0, 0);
-  // print message
-  lcd.print("Semangat Stev!");
-  delay(1000);
-  // clears the display to print new message
-  lcd.clear();
-  // set cursor to first column, second row
-  lcd.setCursor(0,1);
-  lcd.print("Pasti bisa");
-  delay(1000);
-  lcd.clear(); 
+
+void loop()
+{
 }

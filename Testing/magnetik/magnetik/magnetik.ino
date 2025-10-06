@@ -1,37 +1,39 @@
 // ================================================================
-//          UJI COBA SENSOR PINTU MAGNETIK (ESP32)
+//     Uji Sensor Reed Switch Magnetik dengan GPIO 34 & 36 (ESP32)
 // ================================================================
 
-const int MAGNETIK_PIN_1 = 36;   // VP
-const int MAGNETIK_PIN_2 = 34;   // INPUT ONLY
+const int switchReed1 = 34;   // GPIO34 -> Sensor Reed 1
+const int switchReed2 = 36;   // GPIO36 -> Sensor Reed 2
 
 void setup() {
   Serial.begin(115200);
 
-  // Pin 36 dan 34 adalah input-only -> tidak bisa pinMode(INPUT_PULLUP)
-  pinMode(MAGNETIK_PIN_1, INPUT);
-  pinMode(MAGNETIK_PIN_2, INPUT);
+  // Gunakan input biasa, pull-up pakai resistor eksternal
+  pinMode(switchReed1, INPUT);
+  pinMode(switchReed2, INPUT);
 
-  Serial.println("Uji Sensor Magnetik ESP32");
+  Serial.println("Uji Sensor Reed Switch dengan ESP32");
 }
 
 void loop() {
-  int status1 = digitalRead(MAGNETIK_PIN_1);
-  int status2 = digitalRead(MAGNETIK_PIN_2);
+  int status1 = digitalRead(switchReed1);
+  int status2 = digitalRead(switchReed2);
 
-  Serial.print("Magnetik 1: ");
+  // Sensor 1
+  Serial.print("Pintu 1: ");
   if (status1 == HIGH) {
-    Serial.print("TERBUKA");
-  } else {
     Serial.print("TERTUTUP");
-  }
-
-  Serial.print(" | Magnetik 2: ");
-  if (status2 == HIGH) {
-    Serial.println("TERBUKA");
   } else {
-    Serial.println("TERTUTUP");
+    Serial.print("TERBUKA");
   }
 
-  delay(500);
+  // Sensor 2
+  Serial.print(" | Pintu 2: ");
+  if (status2 == HIGH) {
+    Serial.println("TERTUTUP");
+  } else {
+    Serial.println("TERBUKA");
+  }
+
+  delay(300);
 }

@@ -16,6 +16,7 @@ void setup() {
 }
 
 void loop() {
+   Serial.println("Testing GPS6MV2 di ESP32 (RX=17, TX=19)...");
   while (SerialGPS.available() > 0) {
     char c = SerialGPS.read();
     Serial.write(c); // tampilkan data NMEA mentah
