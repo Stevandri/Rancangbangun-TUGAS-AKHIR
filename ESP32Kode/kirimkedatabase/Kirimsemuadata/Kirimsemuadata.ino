@@ -35,6 +35,11 @@ const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
 const int RELAY1_PIN = 4;
 const int RELAY2_PIN = 2;
+//---
+const int LED_HIJAU_1 = 15;
+const int LED_MERAH_1 = 32;
+const int LED_HIJAU_2 = 23;
+const int LED_MERAH_2 = 5;
 
 const byte ROWS = 4;
 const byte COLS = 3;
@@ -52,8 +57,8 @@ char keys[ROWS][COLS] = {{'1','2','3'}, {'4','5','6'}, {'7','8','9'}, {'*','0','
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 // ---------------- VARIABEL GLOBAL ----------------
-float cal1 = -10500.0;
-float cal2 = -10500.0;
+float cal1 = -44938.971;
+float cal2 = -104.586;
 volatile float weight1 = 0.0, weight2 = 0.0;
 volatile bool door1_closed = false, door2_closed = false;
 volatile float gpsLat = 0.0, gpsLng = 0.0;
@@ -65,12 +70,71 @@ String activeCodeLaci1 = "";
 String activeCodeLaci2 = "";
 
 unsigned long lastSerialPrint = 0, lastSupabaseUpdate = 0, lastCodeFetch = 0;
+unsigned long lastRemoteCheck = 0;
 const unsigned long SERIAL_PRINT_INTERVAL = 2000;
 const unsigned long SUPABASE_UPDATE_INTERVAL = 7000;
 const unsigned long CODE_FETCH_INTERVAL = 60000;
+const unsigned long REMOTE_CHECK_INTERVAL = 3000;
 
 
 // --- FUNGSI-FUNGSI ---
+// [FITUR BARU] Cek perintah buka laci dari database
+void checkRemoteUnlock() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  
+  // Perbarui query untuk mengambil kolom 'status' dari tabel 'laci'
+  String url = supabaseUrl + "/rest/v1/laci?select=id,terkunci,status";
+  
+  http.begin(url);
+  http.addHeader("apikey", supabaseAnonKey);
+  http.addHeader("Authorization", "Bearer " + supabaseAnonKey);
+
+  int httpResponseCode = http.GET();
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    JSONVar jsonPayload = JSON.parse(payload);
+
+    if (JSON.typeof(jsonPayload) == "array") {
+      for (int i = 0; i < jsonPayload.length(); i++) {
+        String laciId = (const char*) jsonPayload[i]["id"];
+        bool isLocked = (bool) jsonPayload[i]["terkunci"];
+        String statusLaci = (const char*) jsonPayload[i]["status"]; // Ambil status laci
+
+        // --- [TAMBAHKAN INI] Logika untuk Kontrol LED ---
+        if (laciId == laci1Id) {
+          if (statusLaci == "terisi") {
+            digitalWrite(LED_MERAH_1, HIGH);
+            digitalWrite(LED_HIJAU_1, LOW);
+          } else { // Asumsi status lainnya adalah "kosong"
+            digitalWrite(LED_MERAH_1, LOW);
+            digitalWrite(LED_HIJAU_1, HIGH);
+          }
+        } else if (laciId == laci2Id) {
+          if (statusLaci == "terisi") {
+            digitalWrite(LED_MERAH_2, HIGH);
+            digitalWrite(LED_HIJAU_2, LOW);
+          } else { // Asumsi status lainnya adalah "kosong"
+            digitalWrite(LED_MERAH_2, LOW);
+            digitalWrite(LED_HIJAU_2, HIGH);
+          }
+        }
+        // ------------------------------------------------
+
+        // Logika remote unlock (tidak berubah)
+        if (!isLocked) {
+          if (laciId == laci1Id) digitalWrite(RELAY1_PIN, LOW);
+          else if (laciId == laci2Id) digitalWrite(RELAY2_PIN, LOW);
+        } else {
+          if (laciId == laci1Id) digitalWrite(RELAY1_PIN, HIGH);
+          else if (laciId == laci2Id) digitalWrite(RELAY2_PIN, HIGH);
+        }
+      }
+    }
+  }
+  http.end();
+}
+
 
 // [LOGIKA KODE AMBIL] Fungsi yang dijalankan setelah kode benar
 void processCorrectCode(String code, int relayPin) {
@@ -204,8 +268,8 @@ void sensorTask(void *pvParameters) {
       gpsLng = gps.location.lng();
       gpsValid = true;
     }
-    if (scale1.is_ready()) weight1 = scale1.get_units(5);
-    if (scale2.is_ready()) weight2 = scale2.get_units(5);
+    if (scale1.is_ready()) weight1 = scale1.get_units(10);
+    if (scale2.is_ready()) weight2 = scale2.get_units(10);
     door1_closed = (digitalRead(MAGNET1_PIN) == LOW);
     door2_closed = (digitalRead(MAGNET2_PIN) == LOW);
     vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -221,7 +285,15 @@ void setup() {
   pinMode(RELAY2_PIN, OUTPUT);
   digitalWrite(RELAY1_PIN, HIGH);
   digitalWrite(RELAY2_PIN, HIGH);
-
+  //--
+  pinMode(LED_HIJAU_1, OUTPUT);
+  pinMode(LED_MERAH_1, OUTPUT);
+  pinMode(LED_HIJAU_2, OUTPUT);
+  pinMode(LED_MERAH_2, OUTPUT);
+  digitalWrite(LED_HIJAU_1, LOW);
+  digitalWrite(LED_MERAH_1, LOW);
+  digitalWrite(LED_HIJAU_2, LOW);
+  digitalWrite(LED_MERAH_2, LOW);
   Wire.begin();
   
   lcd.init();      
@@ -285,6 +357,11 @@ void loop() {
   }
 
   unsigned long now = millis();
+
+  if (now - lastRemoteCheck >= REMOTE_CHECK_INTERVAL) {
+    lastRemoteCheck = now;
+    checkRemoteUnlock();
+  }
 
   if (now - lastCodeFetch >= CODE_FETCH_INTERVAL) {
     lastCodeFetch = now;

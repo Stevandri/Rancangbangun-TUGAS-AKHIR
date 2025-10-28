@@ -1,43 +1,69 @@
-#include <TinyGPS++.h>
-#include <HardwareSerial.h>
+#include <TinyGPSPlus.h>
 
 TinyGPSPlus gps;
-HardwareSerial SerialGPS(1);
+HardwareSerial GPSSerial(2); // gunakan UART2
 
-#define RX_PIN 16  // GPS TX ke sini
-#define TX_PIN 17  // GPS RX ke sini
-#define GPS_BAUD 9600
+const int RX_PIN = 16; // koneksi ke TX modul
+const int TX_PIN = 17; // koneksi ke RX modul
+const uint32_t BAUD = 9600; // coba 9600; kalau modul lain pakai 115200
 
 void setup() {
   Serial.begin(115200);
-  SerialGPS.begin(GPS_BAUD, SERIAL_8N1, RX_PIN, TX_PIN);
+  delay(200);
+  Serial.println("ESP32 GPS ATGM336H - TinyGPSPlus example");
 
-  Serial.println("Testing GPS6MV2 di ESP32 (RX=17, TX=19)...");
+  GPSSerial.begin(BAUD, SERIAL_8N1, RX_PIN, TX_PIN);
 }
 
 void loop() {
-   Serial.println("Testing GPS6MV2 di ESP32 (RX=17, TX=19)...");
-  while (SerialGPS.available() > 0) {
-    char c = SerialGPS.read();
-    Serial.write(c); // tampilkan data NMEA mentah
+  // baca semua data yang masuk dari modul GPS
+  while (GPSSerial.available()) {
+  char c = GPSSerial.read();
+  Serial.write(c); // tampilkan semua karakter NMEA
+  gps.encode(c);
+}
+-
 
-    gps.encode(c);
+  // cek kalau ada data valid
+  if (gps.location.isUpdated()) {
+    Serial.print("Lat: ");
+    Serial.print(gps.location.lat(), 6);
+    Serial.print("  Lon: ");
+    Serial.print(gps.location.lng(), 6);
+    Serial.print("  Altitude(m): ");
+    if (gps.altitude.isValid()) Serial.print(gps.altitude.meters());
+    else Serial.print("n/a");
+    Serial.print("  Sats: ");
+    if (gps.satellites.isValid()) Serial.print(gps.satellites.value());
+    else Serial.print("n/a");
+    Serial.println();
+  }
 
-    if (gps.location.isUpdated()) {
-      Serial.println("\n=== Data GPS Valid ===");
-      Serial.print("Latitude  : ");
-      Serial.println(gps.location.lat(), 6);
-      Serial.print("Longitude : ");
-      Serial.println(gps.location.lng(), 6);
-      Serial.print("Satellites: ");
-      Serial.println(gps.satellites.value());
-      Serial.print("Altitude  : ");
-      Serial.print(gps.altitude.meters());
-      Serial.println(" m");
-      Serial.print("Speed     : ");
-      Serial.print(gps.speed.kmph());
-      Serial.println(" km/h");
-      Serial.println("=======================");
+  // cek jumlah satelit terdeteksi
+  if (gps.satellites.isUpdated()) {
+    int satCount = gps.satellites.value();
+    Serial.print("Jumlah Satelit Terhubung: ");
+    if (satCount > 0) {
+      Serial.println(satCount);
+    } else {
+      Serial.println("Tidak ada satelit");
     }
   }
+
+  // contoh lainnya: waktu dari GPS
+  if (gps.time.isValid()) {
+    Serial.print("Time (UTC): ");
+    if (gps.time.hour() < 10) Serial.print('0');
+    Serial.print(gps.time.hour());
+    Serial.print(':');
+    if (gps.time.minute() < 10) Serial.print('0');
+    Serial.print(gps.time.minute());
+    Serial.print(':');
+    if (gps.time.second() < 10) Serial.print('0');
+    Serial.print(gps.time.second());
+    Serial.print('.');
+    Serial.println(gps.time.centisecond());
+  }
+
+  delay(200);
 }

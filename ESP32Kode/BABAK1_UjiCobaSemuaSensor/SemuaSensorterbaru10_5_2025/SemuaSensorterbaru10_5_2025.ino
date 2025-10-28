@@ -4,6 +4,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <RTClib.h>
 #include <TinyGPSPlus.h>
+#include <Arduino_JSON.h> 
 
 TaskHandle_t SensorTask;
 

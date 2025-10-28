@@ -1,65 +1,71 @@
-//================================================================
-//          BABAK 1, POIN 1: SENSOR BERAT (2x HX711)
-//================================================================
-
-// Library yang dibutuhkan
 #include "HX711.h"
 
-// --- Konfigurasi Pin Sensor Berat #1 ---
-const int DOUT_PIN_1 = 35;
-const int SCK_PIN_1 = 18;
+// ---------------- PIN MAPPING ----------------
+const int LOADCELL1_DOUT = 35;
+const int LOADCELL1_SCK  = 18;
+const int LOADCELL2_DOUT = 39;
+const int LOADCELL2_SCK  = 19;
 
-// --- Konfigurasi Pin Sensor Berat #2 ---
-const int DOUT_PIN_2 = 39;
-const int SCK_PIN_2 = 19;
-
-// Inisialisasi objek untuk setiap sensor
 HX711 scale1;
 HX711 scale2;
 
-// Variabel untuk kalibrasi
-// PENTING: Nilai ini HARUS disesuaikan dengan load cell Anda.
-// Mulailah dengan -7050, lalu letakkan beban yang diketahui (misal 1kg),
-// dan ubah nilai ini hingga pembacaan menjadi 1.00.
-// Variabel Kalibrasi
-float KALIBRASI_B1 = -7050.0;
-float KALIBRASI_B2 = -7050.0;
+// ---------------- KALIBRASI ----------------
+// Ganti nilai ini dengan hasil kalibrasi dari proses kalibrasi sebelumnya
+float cal1 = -44938.971;   // contoh hasil kalibrasi load cell 1 (gram)
+float cal2 = -104.586;   // contoh hasil kalibrasi load cell 2 (gram)
 
-
+// ---------------- PENGATURAN PEMBACAAAN ----------------
+const int NUM_SAMPLES = 20;   // jumlah pembacaan untuk rata-rata
+const int SAMPLE_DELAY = 20;   // jeda antar pembacaan (ms) → 20 ms = total ~2 detik per 100 pembacaan
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("--- Memulai Poin 1: Inisialisasi Sensor Berat ---");
 
-  // Inisialisasi Sensor 1
-  scale1.begin(DOUT_PIN_1, SCK_PIN_1);
-  scale1.set_scale(KALIBRASI_B1);
-  scale1.tare(); // Reset pembacaan awal menjadi 0
-  Serial.println("Sensor Berat 1 Siap.");
+  // Inisialisasi Load Cell 1
+  scale1.begin(LOADCELL1_DOUT, LOADCELL1_SCK);
+  scale1.set_scale(cal1);
+  scale1.tare();
 
-  // Inisialisasi Sensor 2
-  scale2.begin(DOUT_PIN_2, SCK_PIN_2);
-  scale2.set_scale(KALIBRASI_B2);
-  scale2.tare(); // Reset pembacaan awal menjadi 0
-  Serial.println("Sensor Berat 2 Siap.");
-  
-  Serial.println("\n--- Memulai Pembacaan ---");
+  // Inisialisasi Load Cell 2
+  scale2.begin(LOADCELL2_DOUT, LOADCELL2_SCK);
+  scale2.set_scale(cal2);
+  scale2.tare();
+
+  Serial.println("== Pembacaan Berat Load Cell 1 & 2 (Rata-rata 100x, satuan gram) ==");
 }
 
 void loop() {
-  // Baca berat dari sensor 1
-  float berat1 = scale1.get_units(5); // Ambil rata-rata 5 pembacaan
-  Serial.print("Berat beban 1 : ");
-  Serial.print(berat1, 2); // Tampilkan 2 angka di belakang koma
-  Serial.println(" kg");
-delay(1000); // Jeda 1 detik agar mudah dibaca
-  // Baca berat dari sensor 2
-  float berat2 = scale2.get_units(10); // Ambil rata-rata 5 pembacaan
-  Serial.print("Berat beban 2 : ");
-  Serial.print(berat2, 2); // Tampilkan 2 angka di belakang koma
-  Serial.println(" kg");
+  // Pembacaan Load Cell 1
+  if (scale1.is_ready()) {
+    float total1 = 0;
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+      total1 += scale1.get_units(1);
+      delay(SAMPLE_DELAY);
+    }
+    float weight1 = total1 / NUM_SAMPLES;
+    Serial.print("Berat 1: ");
+    Serial.print(weight1, 2);
+    Serial.println(" g");
+  } else {
+    Serial.println("Load Cell 1 belum siap");
+  }
 
-  Serial.println("--------------------");
-  
-  delay(1000); // Jeda 1 detik agar mudah dibaca
+  // Pembacaan Load Cell 2
+  if (scale2.is_ready()) {
+    float total2 = 0;
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+      total2 += scale2.get_units(1);
+      delay(SAMPLE_DELAY);
+    }
+    float weight2 = total2 / NUM_SAMPLES;
+    Serial.print("Berat 2: ");
+    Serial.print(weight2, 2);
+    Serial.println(" g");
+  } else {
+    Serial.println("Load Cell 2 belum siap");
+  }
+
+  // (Opsional) Total gabungan dua load cell
+  Serial.println("-------------------------");
+  delay(1000); // tampil setiap 1 detik setelah pembacaan selesai
 }

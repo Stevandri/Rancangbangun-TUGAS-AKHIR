@@ -1,5 +1,5 @@
 // Pin relay
-#define RELAY1 4   // Relay channel 1 (solenoid door lock)
+#define RELAY1 2   // Relay channel 1 (solenoid door lock)
 
 String inputData = "";
 

@@ -1,39 +1,47 @@
-// ================================================================
-//     Uji Sensor Reed Switch Magnetik dengan GPIO 34 & 36 (ESP32)
-// ================================================================
+// ================================================
+//  PROGRAM SEDERHANA: MONITORING MAGNETIC DOOR
+//  Tanpa LED, hanya tampil di Serial Monitor
+// ================================================
 
-const int switchReed1 = 34;   // GPIO34 -> Sensor Reed 1
-const int switchReed2 = 36;   // GPIO36 -> Sensor Reed 2
+#include <Arduino.h>
+
+// ---------------- PIN SENSOR ----------------
+const int MAGNET1_PIN = 36;   // Sensor magnetic pintu 1
+const int MAGNET2_PIN = 34;   // Sensor magnetic pintu 2
+
+// ---------------- VARIABEL STATUS ----------------
+bool door1_closed = false;
+bool door2_closed = false;
+
+unsigned long lastPrint = 0;
+const unsigned long PRINT_INTERVAL = 1000; // tampil tiap 1 detik
 
 void setup() {
   Serial.begin(115200);
 
-  // Gunakan input biasa, pull-up pakai resistor eksternal
-  pinMode(switchReed1, INPUT);
-  pinMode(switchReed2, INPUT);
+  // Setup pin input sensor magnetic (gunakan pull-up internal)
+  pinMode(MAGNET1_PIN, INPUT);
+  pinMode(MAGNET2_PIN, INPUT);
 
-  Serial.println("Uji Sensor Reed Switch dengan ESP32");
+  Serial.println("=== Monitoring Magnetic Door Sensor ===");
+  Serial.println("Menampilkan status pintu setiap 1 detik...");
 }
 
 void loop() {
-  int status1 = digitalRead(switchReed1);
-  int status2 = digitalRead(switchReed2);
+  // Baca sensor magnetic
+  // Asumsi: LOW = tertutup (magnet menempel), HIGH = terbuka
+  door1_closed = (digitalRead(MAGNET1_PIN) == LOW);
+  door2_closed = (digitalRead(MAGNET2_PIN) == LOW);
 
-  // Sensor 1
-  Serial.print("Pintu 1: ");
-  if (status1 == HIGH) {
-    Serial.print("TERTUTUP");
-  } else {
-    Serial.print("TERBUKA");
+  // Cetak status ke Serial Monitor setiap 1 detik
+  if (millis() - lastPrint >= PRINT_INTERVAL) {
+    lastPrint = millis();
+
+    Serial.println("\n---- STATUS PINTU ----");
+    Serial.print("Pintu 1 : ");
+    Serial.println(door1_closed ? "TERTUTUP" : "TERBUKA");
+    Serial.print("Pintu 2 : ");
+    Serial.println(door2_closed ? "TERTUTUP" : "TERBUKA");
+    Serial.println("----------------------");
   }
-
-  // Sensor 2
-  Serial.print(" | Pintu 2: ");
-  if (status2 == HIGH) {
-    Serial.println("TERTUTUP");
-  } else {
-    Serial.println("TERBUKA");
-  }
-
-  delay(300);
 }

@@ -1,33 +1,30 @@
-#include <Arduino.h>
 #include "HX711.h"
 
-// HX711 circuit wiring
-const int LOADCELL_DOUT_PIN = 35;
-const int LOADCELL_SCK_PIN = 18;
+// ---------------- PIN MAPPING ----------------
+const int LOADCELL_DOUT_PIN = 35;  // Ganti sesuai wiring kamu
+const int LOADCELL_SCK_PIN  = 18;  // Ganti sesuai wiring kamu
 
 HX711 scale;
 
 void setup() {
   Serial.begin(115200);
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  Serial.println("Tare… hapus beban dari timbangan");
+  delay(5000);
+  scale.tare();
+  Serial.println("Tare selesai.");
+  Serial.println("Letakkan benda dengan berat diketahui (misalnya 100 g) …");
+  delay(5000);
+  
+  long reading = scale.get_units(10);  // ambil rata-rata 10 pembacaan
+  Serial.print("Hasil pembacaan: ");
+  Serial.println(reading);
+  
+  // Cetak petunjuk agar user menghitung faktor kalibrasi:
+  Serial.println("Gunakan rumus: calibration_factor = reading / known_weight");
+  Serial.println("(Contoh: jika reading = 50000 dan berat = 100 g -> faktor = 50000 / 100 = 500)");
 }
 
 void loop() {
-  if (scale.is_ready()) {
-    scale.set_scale();    
-    Serial.println("Tare... remove any weights from the scale.");
-    delay(5000);
-    scale.tare();
-    Serial.println("Tare done...");
-    Serial.print("Place a known weight on the scale...");
-    delay(5000);
-
-    long reading = scale.get_value(10); // raw data rata-rata 10x
-    Serial.print("Result: ");
-    Serial.println(reading);
-  } 
-  else {
-    Serial.println("HX711 not found.");
-  }
-  delay(1000);
+  // tidak digunakan dalam tahap kalibrasi
 }

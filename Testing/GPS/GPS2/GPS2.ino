@@ -1,35 +1,51 @@
-#include "HX711.h"
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
 
-// HX711 circuit wiring
-const int LOADCELL_DOUT_PIN = 16;
-const int LOADCELL_SCK_PIN = 4;
+// Gunakan salah satu UART hardware ESP32 (Serial1 atau Serial2)
+HardwareSerial gpsSerial(1);  // bisa 1 atau 2 tergantung pin yang kamu pilih
 
-HX711 scale;
+TinyGPSPlus gps;
 
 void setup() {
   Serial.begin(115200);
-  rtc_cpu_freq_config_t config;
-  rtc_clk_cpu_freq_get_config(&config);
-  rtc_clk_cpu_freq_to_config(RTC_CPU_FREQ_80M, &config);
-  rtc_clk_cpu_freq_set_config_fast(&config);
-  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  // GPS module – sambungkan ke RX2/TX2 (atau sesuai konfigurasi kamu)
+  // Contoh: RX GPS ke TX2 (GPIO17), TX GPS ke RX2 (GPIO16)
+  gpsSerial.begin(9600, SERIAL_8N1, 16, 17);
+  
+  Serial.println("ESP32 + NEO-6M GPS : Menampilkan Waktu & Lokasi");
 }
 
 void loop() {
-   if (scale.is_ready()) {
-    scale.set_scale();    
-    Serial.println("Tare... remove any weights from the scale.");
-    delay(5000);
-    scale.tare();
-    Serial.println("Tare done...");
-    Serial.print("Place a known weight on the scale...");
-    delay(5000);
-    long reading = scale.get_units(10);
-    Serial.print("Result: ");
-    Serial.println(reading);
-  } 
-  else {
-    Serial.println("HX711 not found.");
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
   }
+
+  if (gps.location.isValid() && gps.time.isValid()) {
+    double lat = gps.location.lat();
+    double lng = gps.location.lng();
+    int hour = gps.time.hour();
+    int minute = gps.time.minute();
+    int second = gps.time.second();
+
+    // Waktu UTC yang diberikan GPS
+    Serial.print("Waktu UTC: ");
+    if (hour < 10) Serial.print('0');
+    Serial.print(hour);
+    Serial.print(':');
+    if (minute < 10) Serial.print('0');
+    Serial.print(minute);
+    Serial.print(':');
+    if (second < 10) Serial.print('0');
+    Serial.println(second);
+
+    Serial.print("Latitude: ");
+    Serial.println(lat, 6);
+    Serial.print("Longitude: ");
+    Serial.println(lng, 6);
+    Serial.println();
+  } else {
+    Serial.println("Menunggu data GPS valid...");
+  }
+
   delay(1000);
 }

@@ -11,6 +11,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <RTClib.h>
 #include <TinyGPSPlus.h>
+#include <Arduino_JSON.h>
 
 // ---------------- KONFIGURASI KONEKSI (WAJIB DIISI) ----------------
 const char* WIFI_SSID = "Stev";
@@ -34,6 +35,11 @@ const int GPS_RX_PIN = 16;
 const int GPS_TX_PIN = 17;
 const int RELAY1_PIN = 4;
 const int RELAY2_PIN = 2;
+//---
+const int LED_HIJAU_1 = 15;
+const int LED_MERAH_1 = 32;
+const int LED_HIJAU_2 = 23;
+const int LED_MERAH_2 = 5;
 
 const byte ROWS = 4;
 const byte COLS = 3;
@@ -51,8 +57,8 @@ char keys[ROWS][COLS] = {{'1','2','3'}, {'4','5','6'}, {'7','8','9'}, {'*','0','
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 // ---------------- VARIABEL GLOBAL ----------------
-float cal1 = -10500.0;
-float cal2 = -10500.0;
+float cal1 = -44938.971;
+float cal2 = -104.586;
 volatile float weight1 = 0.0, weight2 = 0.0;
 volatile bool door1_closed = false, door2_closed = false;
 volatile float gpsLat = 0.0, gpsLng = 0.0;
@@ -64,12 +70,73 @@ String activeCodeLaci1 = "";
 String activeCodeLaci2 = "";
 
 unsigned long lastSerialPrint = 0, lastSupabaseUpdate = 0, lastCodeFetch = 0;
+unsigned long lastRemoteCheck = 0;
 const unsigned long SERIAL_PRINT_INTERVAL = 2000;
 const unsigned long SUPABASE_UPDATE_INTERVAL = 7000;
 const unsigned long CODE_FETCH_INTERVAL = 60000;
+const unsigned long REMOTE_CHECK_INTERVAL = 3000;
 
 
 // --- FUNGSI-FUNGSI ---
+// [FITUR BARU] Cek perintah buka laci dari database
+void checkRemoteUnlock() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+
+  http.setTimeout(2500); // Set timeout 2.5 detik
+  
+  // Perbarui query untuk mengambil kolom 'status' dari tabel 'laci'
+  String url = supabaseUrl + "/rest/v1/laci?select=id,terkunci,status";
+  
+  http.begin(url);
+  http.addHeader("apikey", supabaseAnonKey);
+  http.addHeader("Authorization", "Bearer " + supabaseAnonKey);
+
+  int httpResponseCode = http.GET();
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    JSONVar jsonPayload = JSON.parse(payload);
+
+    if (JSON.typeof(jsonPayload) == "array") {
+      for (int i = 0; i < jsonPayload.length(); i++) {
+        String laciId = (const char*) jsonPayload[i]["id"];
+        bool isLocked = (bool) jsonPayload[i]["terkunci"];
+        String statusLaci = (const char*) jsonPayload[i]["status"]; // Ambil status laci
+
+        // --- [TAMBAHKAN INI] Logika untuk Kontrol LED ---
+        if (laciId == laci1Id) {
+          if (statusLaci == "terisi") {
+            digitalWrite(LED_MERAH_1, HIGH);
+            digitalWrite(LED_HIJAU_1, LOW);
+          } else { // Asumsi status lainnya adalah "kosong"
+            digitalWrite(LED_MERAH_1, LOW);
+            digitalWrite(LED_HIJAU_1, HIGH);
+          }
+        } else if (laciId == laci2Id) {
+          if (statusLaci == "terisi") {
+            digitalWrite(LED_MERAH_2, HIGH);
+            digitalWrite(LED_HIJAU_2, LOW);
+          } else { // Asumsi status lainnya adalah "kosong"
+            digitalWrite(LED_MERAH_2, LOW);
+            digitalWrite(LED_HIJAU_2, HIGH);
+          }
+        }
+        // ------------------------------------------------
+
+        // Logika remote unlock (tidak berubah)
+        if (!isLocked) {
+          if (laciId == laci1Id) digitalWrite(RELAY1_PIN, LOW);
+          else if (laciId == laci2Id) digitalWrite(RELAY2_PIN, LOW);
+        } else {
+          if (laciId == laci1Id) digitalWrite(RELAY1_PIN, HIGH);
+          else if (laciId == laci2Id) digitalWrite(RELAY2_PIN, HIGH);
+        }
+      }
+    }
+  }
+  http.end();
+}
+
 
 // [LOGIKA KODE AMBIL] Fungsi yang dijalankan setelah kode benar
 void processCorrectCode(String code, int relayPin) {
@@ -77,27 +144,28 @@ void processCorrectCode(String code, int relayPin) {
   lcd.clear();
   lcd.print("Laci Terbuka!");
 
-  // --- UPDATE TABEL TITIPAN ---
   DateTime now = rtc.now();
   char now_iso[25];
   sprintf(now_iso, "%04d-%02d-%02dT%02d:%02d:%02dZ", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
   String titipanPayload = "{\"waktu_diambil\":\"" + String(now_iso) + "\", \"status\":\"diambil\"}";
   
   HTTPClient http;
+  http.setTimeout(2500);
   String titipanUrl = supabaseUrl + "/rest/v1/titipan?kode_ambil=eq." + code;
   http.begin(titipanUrl);
   http.addHeader("apikey", supabaseAnonKey);
   http.addHeader("Authorization", "Bearer " + supabaseAnonKey);
   http.addHeader("Content-Type", "application/json");
-  http.PATCH(titipanPayload);
+  int httpResponseCode = http.PATCH(titipanPayload);
+  if (httpResponseCode < 0) {
+     Serial.printf("PATCH GAGAL (Kode: %s), error: %s\n", code.c_str(), http.errorToString(httpResponseCode).c_str());
+  }
   http.end();
 
-  // --- UPDATE TABEL LACI ---
   String laciIdToUpdate = (relayPin == RELAY1_PIN) ? laci1Id : laci2Id;
   String laciPayload = "{\"status\":\"kosong\"}";
   patchToSupabase("laci", laciIdToUpdate, laciPayload);
 
-  // --- [PERBAIKAN] KOSONGKAN VARIABEL KODE SETELAH DIGUNAKAN ---
   if (relayPin == RELAY1_PIN) {
     activeCodeLaci1 = "";
     Serial.println("Variabel activeCodeLaci1 dikosongkan.");
@@ -105,13 +173,12 @@ void processCorrectCode(String code, int relayPin) {
     activeCodeLaci2 = "";
     Serial.println("Variabel activeCodeLaci2 dikosongkan.");
   }
-  // -----------------------------------------------------------------
-
+  
   lcd.setCursor(0, 1);
   lcd.print("Tutup Kembali");
 
   int magnetPin = (relayPin == RELAY1_PIN) ? MAGNET1_PIN : MAGNET2_PIN;
-  while (digitalRead(magnetPin) != LOW) { // Tunggu sampai pintu tertutup
+  while (digitalRead(magnetPin) != LOW) {
     delay(100);
   }
 
@@ -121,29 +188,30 @@ void processCorrectCode(String code, int relayPin) {
 }
 
 // [SUPABASE] Fungsi untuk mengirim permintaan PATCH
+// [SUPABASE] Fungsi untuk mengirim permintaan PATCH
 void patchToSupabase(String table, String id, String jsonPayload) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi tidak terhubung, gagal kirim data.");
-    return;
-  }
-  
+  if (WiFi.status() != WL_CONNECTED) { return;}
   HTTPClient http;
-  String url = supabaseUrl + "/rest/v1/" + table + "?id=eq." + id;
   
+  // --- [TAMBAHKAN INI] ---
+  http.setTimeout(2500); // Set timeout 2.5 detik
+  // -----------------------
+
+  String url = supabaseUrl + "/rest/v1/" + table + "?id=eq." + id;
   http.begin(url);
   http.addHeader("apikey", supabaseAnonKey);
   http.addHeader("Authorization", "Bearer " + supabaseAnonKey);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Prefer", "return=minimal");
 
+  // --- [UBAH BAGIAN INI] ---
+  // http.PATCH(jsonPayload); // Ganti baris ini
+  
+  // Menjadi ini (untuk memeriksa error):
   int httpResponseCode = http.PATCH(jsonPayload);
-  
-  if (httpResponseCode > 0) {
-    Serial.printf("Update %s: HTTP Response Code %d\n", table.c_str(), httpResponseCode);
-  } else {
-    Serial.printf("Gagal update %s: Error %s\n", table.c_str(), http.errorToString(httpResponseCode).c_str());
+  if (httpResponseCode < 0) {
+    Serial.printf("PATCH GAGAL (Tbl: %s, ID: %s), error: %s\n", table.c_str(), id.c_str(), http.errorToString(httpResponseCode).c_str());
   }
-  
   http.end();
 }
 
@@ -151,10 +219,8 @@ void patchToSupabase(String table, String id, String jsonPayload) {
 void sendSensorDataToSupabase() {
   String laci1Payload = "{\"berat_titipan\":" + String(weight1, 2) + ", \"magnetik_door\":" + (door1_closed ? "true" : "false") + "}";
   patchToSupabase("laci", laci1Id, laci1Payload);
-  
   String laci2Payload = "{\"berat_titipan\":" + String(weight2, 2) + ", \"magnetik_door\":" + (door2_closed ? "true" : "false") + "}";
   patchToSupabase("laci", laci2Id, laci2Payload);
-
   if (gpsValid) {
     String gpsPayload = "{\"koordinat_lat\":" + String(gpsLat, 6) + ", \"koordinat_long\":" + String(gpsLng, 6) + "}";
     patchToSupabase("GPS", "1", gpsPayload);
@@ -166,6 +232,7 @@ void fetchActiveCodes() {
   if (WiFi.status() != WL_CONNECTED) return;
   
   HTTPClient http;
+  http.setTimeout(2500); // Set timeout 2.5 detik
   String url = supabaseUrl + "/rest/v1/titipan?select=kode_ambil,laci_id&status=eq.dititipkan";
   
   http.begin(url);
@@ -177,19 +244,35 @@ void fetchActiveCodes() {
   if (httpResponseCode == 200) {
     String payload = http.getString();
     Serial.println("Response kode aktif: " + payload);
-    
-    if (payload.indexOf(laci1Id) != -1) {
-      int startIndex = payload.indexOf("kode_ambil", payload.indexOf(laci1Id)) + 13;
-      activeCodeLaci1 = payload.substring(startIndex, startIndex + 5);
-    } else { activeCodeLaci1 = ""; }
 
-    if (payload.indexOf(laci2Id) != -1) {
-      int startIndex = payload.indexOf("kode_ambil", payload.indexOf(laci2Id)) + 13;
-      activeCodeLaci2 = payload.substring(startIndex, startIndex + 5);
-    } else { activeCodeLaci2 = ""; }
+    // Parse string JSON menjadi objek yang bisa dibaca
+    JSONVar jsonPayload = JSON.parse(payload);
+
+    // Periksa apakah parsing berhasil dan hasilnya adalah Array
+    if (JSON.typeof(jsonPayload) == "array") {
+      // Reset kode sebelum diisi ulang
+      activeCodeLaci1 = "";
+      activeCodeLaci2 = "";
+
+      // Loop melalui setiap item di dalam array JSON
+      for (int i = 0; i < jsonPayload.length(); i++) {
+        String laciIdFromJson = (const char*) jsonPayload[i]["laci_id"];
+        String kodeAmbilFromJson = (const char*) jsonPayload[i]["kode_ambil"];
+
+        // Cocokkan laci_id dan simpan kodenya
+        if (laciIdFromJson == laci1Id) {
+          activeCodeLaci1 = kodeAmbilFromJson;
+        } else if (laciIdFromJson == laci2Id) {
+          activeCodeLaci2 = kodeAmbilFromJson;
+        }
+      }
+    } else {
+      Serial.println("Gagal parsing JSON, format tidak sesuai array.");
+    }
     
     Serial.println("Kode Laci 1 tersimpan: " + activeCodeLaci1);
     Serial.println("Kode Laci 2 tersimpan: " + activeCodeLaci2);
+
   } else {
     Serial.printf("Gagal ambil kode, HTTP: %d\n", httpResponseCode);
   }
@@ -206,8 +289,8 @@ void sensorTask(void *pvParameters) {
       gpsLng = gps.location.lng();
       gpsValid = true;
     }
-    if (scale1.is_ready()) weight1 = scale1.get_units(5);
-    if (scale2.is_ready()) weight2 = scale2.get_units(5);
+    if (scale1.is_ready()) weight1 = scale1.get_units(10);
+    if (scale2.is_ready()) weight2 = scale2.get_units(10);
     door1_closed = (digitalRead(MAGNET1_PIN) == LOW);
     door2_closed = (digitalRead(MAGNET2_PIN) == LOW);
     vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -223,7 +306,15 @@ void setup() {
   pinMode(RELAY2_PIN, OUTPUT);
   digitalWrite(RELAY1_PIN, HIGH);
   digitalWrite(RELAY2_PIN, HIGH);
-
+  //--
+  pinMode(LED_HIJAU_1, OUTPUT);
+  pinMode(LED_MERAH_1, OUTPUT);
+  pinMode(LED_HIJAU_2, OUTPUT);
+  pinMode(LED_MERAH_2, OUTPUT);
+  digitalWrite(LED_HIJAU_1, LOW);
+  digitalWrite(LED_MERAH_1, LOW);
+  digitalWrite(LED_HIJAU_2, LOW);
+  digitalWrite(LED_MERAH_2, LOW);
   Wire.begin();
   
   lcd.init();      
@@ -287,6 +378,11 @@ void loop() {
   }
 
   unsigned long now = millis();
+
+  if (now - lastRemoteCheck >= REMOTE_CHECK_INTERVAL) {
+    lastRemoteCheck = now;
+    checkRemoteUnlock();
+  }
 
   if (now - lastCodeFetch >= CODE_FETCH_INTERVAL) {
     lastCodeFetch = now;
